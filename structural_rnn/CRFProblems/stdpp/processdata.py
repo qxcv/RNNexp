@@ -1,10 +1,9 @@
+"""Transforms data from standard P2DDataset/P3DDataset format into something
+that SRNN code can understand."""
 import numpy as np
 import copy
 from neuralmodels.utils import readCSVasFloat
-import socket as soc
-import cPickle
 
-global rng
 rng = np.random.RandomState(1234567890)
 
 global trainSubjects, validateSubject, testSubject, actions
@@ -14,7 +13,6 @@ validateSubject = ['S11']
 testSubject = ['S5']
 allSubjects = ['S1', 'S6', 'S7', 'S8', 'S9', 'S11', 'S5']
 
-#actions =['directions','discussion','eating','greeting','phoning','posing','purchases','sitting','sittingdown','smoking','takingphoto','waiting','walking','walkingdog','walkingtogether']
 actions = ['walking', 'eating', 'smoking']
 subactions = ['1', '2']
 
