@@ -1,8 +1,5 @@
 import subprocess as sbp
 import os
-import copy
-import socket as soc
-from datetime import datetime
 import sys
 
 train_model = sys.argv[1]

@@ -43,7 +43,7 @@ args = parser.parse_args()
 
 '''Loads H3.6m dataset'''
 print 'Loading H3.6m'
-sys.path.insert(0,'CRFProblems/H3.6m')
+sys.path.insert(0,'crfproblems/h36m')
 import processdata as poseDataset
 poseDataset.T = 150
 poseDataset.delta_shift = 100
@@ -53,7 +53,7 @@ poseDataset.motion_suffix = args.motion_suffix
 poseDataset.temporal_features = args.temporal_features
 poseDataset.full_skeleton = args.full_skeleton
 poseDataset.dataset_prefix = args.dataset_prefix
-poseDataset.crf_file = './CRFProblems/H3.6m/crf'
+poseDataset.crf_file = './crfproblems/h36m/crf'
 poseDataset.train_for = args.train_for
 poseDataset.drop_features = args.drop_features
 poseDataset.drop_id = [args.drop_id]
@@ -67,7 +67,7 @@ if not os.path.exists(path):
 	print 'Checkpoint path does not exist. Exiting!!'
 	sys.exit()
 
-crf_file = './CRFProblems/H3.6m/crf'
+crf_file = './crfproblems/h36m/crf'
 
 if args.forecast == 'srnn':
     path_to_checkpoint = '{0}checkpoint'.format(path)

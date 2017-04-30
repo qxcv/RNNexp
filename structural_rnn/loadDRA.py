@@ -17,7 +17,7 @@ import copy
 import readCRFgraph as graph
 
 '''Loads H3.6m dataset'''
-sys.path.insert(0,'CRFProblems/H3.6m')
+sys.path.insert(0,'crfproblems/h36m')
 import processdata as poseDataset
 poseDataset.T = 150
 poseDataset.delta_shift = 100
@@ -26,7 +26,7 @@ print '**** H3.6m Loaded ****'
 
 #trX,trY = poseDataset.getMalikFeatures()
 #trX_forecasting,trY_forecasting = poseDataset.getMalikTrajectoryForecasting()
-crf_file = './CRFProblems/H3.6m/crf'
+crf_file = './crfproblems/h36m/crf'
 [nodeNames,nodeList,nodeFeatureLength,nodeConnections,edgeList,edgeFeatures,nodeToEdgeConnections,trX,trY,trX_validation,trY_validation,trX_forecasting,trY_forecasting] = graph.readCRFgraph(crf_file,poseDataset)
 
 base_dir = poseDataset.base_dir

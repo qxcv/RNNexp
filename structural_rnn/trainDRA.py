@@ -85,7 +85,7 @@ drop_id = []
 for dids in drop_ids:
     drop_id.append(int(dids))
 '''Loads H3.6m dataset'''
-sys.path.insert(0, 'CRFProblems/H3.6m')
+sys.path.insert(0, 'crfproblems/h36m')
 import processdata as poseDataset
 poseDataset.T = args.sequence_length
 poseDataset.delta_shift = args.sequence_length - args.sequence_overlap
@@ -94,7 +94,7 @@ poseDataset.copy_state = args.copy_state
 poseDataset.full_skeleton = args.full_skeleton
 poseDataset.train_for = args.train_for
 poseDataset.temporal_features = args.temporal_features
-poseDataset.crf_file = './CRFProblems/H3.6m/crf' + args.crf
+poseDataset.crf_file = './crfproblems/h36m/crf' + args.crf
 poseDataset.dataset_prefix = args.dataset_prefix
 poseDataset.drop_features = args.drop_features
 poseDataset.drop_id = drop_id
