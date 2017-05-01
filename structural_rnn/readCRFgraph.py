@@ -161,25 +161,11 @@ def convert_forecast_data(poseDataset, tensor_ntd):
     nfr = poseDataset.nodeFeaturesRanges
     nodeFeatures = poseDataset.cherryPickNodeFeatures(tensor_tnd, nfr)
     for nodeName in nodeNames.keys():
-        edge_features = {}
         nodeType = nodeNames[nodeName]
-        edgeTypesConnectedTo = nodeToEdgeConnections[nodeType].keys()
-
-        for edgeType in edgeTypesConnectedTo:
-            edge_features[edgeType] = poseDataset.getDRAFeatures(
-                nodeName, edgeType, nodeConnections, nodeNames, nodeFeatures)
-
-        edgeType = nodeType + '_input'
-        nodeRNNFeatures = copy.deepcopy(edge_features[edgeType])
-
-        for edgeType in edgeList:
-            if edgeType not in edgeTypesConnectedTo:
-                continue
-            nodeRNNFeatures = np.concatenate(
-                (nodeRNNFeatures, edge_features[edgeType]), axis=2)
 
         idx = nodeName + ':' + nodeType
-        trX_forecast[idx] = nodeRNNFeatures
+        trX_forecast[idx] = getNodeFeature(nodeName, nodeFeatures, None,
+                                           poseDataset)
         trX_nodeFeatures[idx] = nodeFeatures[nodeName]
 
     return trX_forecast, trX_nodeFeatures

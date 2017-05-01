@@ -4,7 +4,6 @@
 import argparse
 import json
 import os
-import sys
 
 import h5py
 import numpy as np
@@ -157,6 +156,9 @@ def main():
             return fcst_ntd
 
         method.method_name = 'srnn'
+
+        write_baseline(args.output_path, poseDataset.dataset,
+                       poseDataset.dataset.eval_test_length, method)
     # elif args.forecast == 'lstm3lr' or args.forecast == 'erd':
     #     path_to_checkpoint = '{0}checkpoint.{1}'.format(path, iteration)
     #     if os.path.exists(path_to_checkpoint):
@@ -222,6 +224,8 @@ def main():
     #         model.saveCellState(cellstate, path, fname)
     #         t1 = time.time()
     #         del model
+    else:
+        raise ValueError("Unknown forecast method '%s'" % args.forecast)
 
 
 if __name__ == '__main__':
