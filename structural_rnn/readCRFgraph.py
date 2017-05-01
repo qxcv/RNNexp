@@ -145,3 +145,25 @@ def readCRFgraph(poseDataset, noise=1e-10, forecast_on_noisy_features=False):
         edgeList, edgeListComplete, edgeFeatures, nodeToEdgeConnections, \
         trX, trY, trX_validate, trY_validate, trX_forecast, trY_forecast, \
         trX_nodeFeatures
+
+
+def getNodeFeature(nodeName, nodeFeatures, nodeFeatures_t_1, poseDataset):
+    edge_features = {}
+    nodeType = nodeNames[nodeName]
+    edgeTypesConnectedTo = nodeToEdgeConnections[nodeType].keys()
+
+    for edgeType in edgeTypesConnectedTo:
+        edge_features[edgeType] = poseDataset.getDRAfeatures(
+            nodeName, edgeType, nodeConnections, nodeNames, nodeFeatures,
+            nodeFeatures_t_1)
+
+    edgeType = nodeType + '_input'
+    nodeRNNFeatures = copy.deepcopy(edge_features[edgeType])
+
+    for edgeType in edgeList:
+        if edgeType not in edgeTypesConnectedTo:
+            continue
+        nodeRNNFeatures = np.concatenate(
+            (nodeRNNFeatures, edge_features[edgeType]), axis=2)
+
+    return nodeRNNFeatures
