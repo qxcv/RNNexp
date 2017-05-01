@@ -154,8 +154,7 @@ def getNodeFeature(nodeName, nodeFeatures, nodeFeatures_t_1, poseDataset):
 
     for edgeType in edgeTypesConnectedTo:
         edge_features[edgeType] = poseDataset.getDRAfeatures(
-            nodeName, edgeType, nodeConnections, nodeNames, nodeFeatures,
-            nodeFeatures_t_1)
+            nodeName, edgeType, nodeConnections, nodeNames, nodeFeatures)
 
     edgeType = nodeType + '_input'
     nodeRNNFeatures = copy.deepcopy(edge_features[edgeType])
