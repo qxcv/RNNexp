@@ -28,8 +28,6 @@ rng = np.random.RandomState(1234567890)
 def get_default_args():
     train_model = 'srnn'  # also try 'lstm3lr' or 'erd'
 
-    base_dir = open('basedir', 'r').readline().strip()
-
     # Hyper parameters for training S-RNN
     params = {}
 
@@ -111,16 +109,6 @@ def get_default_args():
         params['crf'] = ''
         params['weight_decay'] = 0.0
 
-    # Setting directory to dump trained models and then executing trainDRA.py
-    params['checkpoint_path'] \
-        = 'checkpoints_{0}_T_{2}_bs_{1}_tg_{3}_ls_{4}_fc_{5}_demo'.format(
-            params['model_to_train'], params['batch_size'],
-            params['sequence_length'], params['truncate_gradient'],
-            params['lstm_size'], params['fc_size'])
-    path_to_checkpoint = base_dir + '/{0}/'.format(params['checkpoint_path'])
-    if not os.path.exists(path_to_checkpoint):
-        os.mkdir(path_to_checkpoint)
-    print 'Dir: {0}'.format(path_to_checkpoint)
     default_args = []
     for k in params.keys():
         default_args.append('--{0}'.format(k))
@@ -157,7 +145,6 @@ parser.add_argument('--truncate_gradient', type=int, default=50)
 parser.add_argument('--use_pretrained', type=int, default=0)
 parser.add_argument('--iter_to_load', type=int, default=None)
 parser.add_argument('--model_to_train', type=str, default='dra')
-parser.add_argument('--checkpoint_path', type=str, default='checkpoint')
 parser.add_argument('--sequence_length', type=int, default=150)
 parser.add_argument('--sequence_overlap', type=int, default=50)
 parser.add_argument('--maxiter', type=int, default=15000)
@@ -175,6 +162,19 @@ parser.add_argument('dataset_path', help='path to .h5 containing poses')
 parser.add_argument('output_dir', help='where to store snapshots and poses')
 args = parser.parse_args(get_default_args() + sys.argv[1:])
 
+# Setting directory to dump trained models and then executing trainDRA.py
+checkpoint_suffix \
+    = 'checkpoints_{0}_T_{2}_bs_{1}_tg_{3}_ls_{4}_fc_{5}_demo/'.format(
+        args.model_to_train, args.batch_size,
+        args.sequence_length, args.truncate_gradient,
+        args.lstm_size, args.fc_size)
+checkpoint_dir = os.path.join(args.output_dir, checkpoint_suffix)
+try:
+    os.makedirs(checkpoint_dir)
+except OSError:
+    pass
+print 'Checkpoint dir: {0}'.format(checkpoint_dir)
+
 print args
 if args.use_pretrained:
     print 'Loading pre-trained model with iter={0}'.format(args.iter_to_load)
@@ -182,10 +182,9 @@ gradient_method = Momentum(momentum=args.momentum)
 
 # Loads H3.6m dataset
 poseDataset.T = args.sequence_length
-poseDataset.delta_shift = args.sequence_length - args.sequence_overlap
-poseDataset.num_forecast_examples = 24
 poseDataset.train_for = args.train_for
 poseDataset.crf_file = './crfproblems/stdpp/crf' + args.crf
+poseDataset.ds_label = 'ikea'  # XXX: this should change for other DS!
 poseDataset.ds_path = args.dataset_path
 poseDataset.ds_is_3d = args.is_3d
 poseDataset.runall()
@@ -551,8 +550,7 @@ def LSTMRegression(inputDim):
 
 
 def trainDRA():
-    path_to_checkpoint = poseDataset.base_dir + '/{0}/'.format(
-        args.checkpoint_path)
+    path_to_checkpoint = checkpoint_dir
     print path_to_checkpoint
     if not os.path.exists(path_to_checkpoint):
         os.mkdir(path_to_checkpoint)
@@ -622,8 +620,7 @@ def trainDRA():
 
 
 def trainMaliks():
-    path_to_checkpoint = poseDataset.base_dir + '/{0}/'.format(
-        args.checkpoint_path)
+    path_to_checkpoint = checkpoint_dir
 
     if not os.path.exists(path_to_checkpoint):
         os.mkdir(path_to_checkpoint)
@@ -674,8 +671,7 @@ def trainMaliks():
 
 
 def trainLSTM():
-    path_to_checkpoint = poseDataset.base_dir + '/{0}/'.format(
-        args.checkpoint_path)
+    path_to_checkpoint = checkpoint_dir
 
     if not os.path.exists(path_to_checkpoint):
         os.mkdir(path_to_checkpoint)

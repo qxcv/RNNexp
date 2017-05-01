@@ -71,6 +71,10 @@ target/
 # Simulink Code Generation
 */slprj/
 
+# Editor files
+.#*
+*.swp
+
 */MocapToolbox/java/*
 */MocapToolbox/python/*
 */MocapToolbox/old_python/*

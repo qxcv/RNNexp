@@ -13,18 +13,29 @@ rng = np.random.RandomState(1234567890)
 global actions
 
 
+def map_2xp1(d):
+    """Maps dictionary of T->[int] into dictionary where each element x in each
+    value list has been mapped to both 2*x and 2*x+1. This is meant to mimic
+    the way that skeletons are flattened by P2DDataset (joint j will have data
+    in the 2*jth and (2*j+1)th columns)."""
+    out_d = {}
+    for k, l in d.items():
+        out_d[k] = new_l = []
+        for x in l:
+            new_l.extend([2*x, 2*x+1])
+    return out_d
+
+
 def get_feat_ranges(ds_label):
     """Tells loader which features (identified by column indices) to associate
     with which NodeRNNs (identified by name)."""
-    assert False, \
-        "have you added a downstream check to make sure this partitions " \
-        "*all* features? Need to make sure I'm not being passed a head"
     nodeFeaturesRanges = {}
     if ds_label == 'ikea':
         # Ikea 7-joint (basically first 8 CPM joints minus the head)
         nodeFeaturesRanges['shoulders'] = [0, 1, 4]
         nodeFeaturesRanges['right_arm'] = [2, 3]
         nodeFeaturesRanges['left_arm'] = [5, 6]
+        nodeFeaturesRanges = map_2xp1(nodeFeaturesRanges)
     else:
         raise ValueError(
             "I don't have limb definitions for %s yet (add some here!)" %
@@ -36,24 +47,8 @@ def normalizationStats(completeData):
     """Compute mean and standard deviation for full dataset."""
     data_mean = np.mean(completeData, axis=0)
     data_std = np.std(completeData, axis=0)
-    # Sam: I've disabled this because I don't have any constant/useless dims
-    # (AFAIK)
-    new_idx = []
-    count = 0
-    for i in range(completeData.shape[1]):
-        new_idx.append(count)
-        count += 1
-    # Returns the mean of data, std, and dimensions with small std. Which we
-    # later ignore.
-    return data_mean, data_std, np.array(new_idx)
-
-
-def normalizeTensor(inputTensor):
-    """Standardise 3D (N*T*D) tensor"""
-    meanTensor = data_mean.reshape((1, 1, inputTensor.shape[2]))
-    stdTensor = data_std.reshape((1, 1, inputTensor.shape[2]))
-    normalizedTensor = (inputTensor - meanTensor) / stdTensor
-    return normalizedTensor
+    # Just returns mean and std of data
+    return data_mean, data_std
 
 
 def addNoise(X_old, X_t_1_old, noise=1e-5):
@@ -107,27 +102,24 @@ def getfeatures(nodeName,
     getlabels() because it does a slightly different thing for each
     NodeRNN/EdgeRNN."""
     train_features = getDRAfeatures(nodeName, edgeType, nodeConnections,
-                                    nodeNames, nodeFeatures_noisy,
-                                    nodeFeatures_t_1_noisy)
+                                    nodeNames, nodeFeatures_noisy)
     validate_features = getDRAfeatures(nodeName, edgeType, nodeConnections,
-                                       nodeNames, validate_nodeFeatures_noisy,
-                                       validate_nodeFeatures_t_1_noisy)
+                                       nodeNames, validate_nodeFeatures_noisy)
 
     forecast_features = []
     if forecast_on_noisy_features:
         forecast_features = getDRAfeatures(
             nodeName, edgeType, nodeConnections, nodeNames,
-            forecast_nodeFeatures_noisy, forecast_nodeFeatures_t_1_noisy)
+            forecast_nodeFeatures_noisy)
     else:
         forecast_features = getDRAfeatures(nodeName, edgeType, nodeConnections,
-                                           nodeNames, forecast_nodeFeatures,
-                                           forecast_nodeFeatures_t_1)
+                                           nodeNames, forecast_nodeFeatures)
 
     return train_features, validate_features, forecast_features
 
 
 def getDRAfeatures(nodeName, edgeType, nodeConnections, nodeNames,
-                   features_to_use, features_to_use_t_1):
+                   features_to_use):
     """Get input tensor for given combination of node and edge type."""
     if edgeType.split('_')[1] == 'input':
         return features_to_use[nodeName]
@@ -210,10 +202,7 @@ def getMalikTrajectoryForecasting(noise=1e-5):
 # Globals which are used to configure this module (once runall() is called) #
 #############################################################################
 
-# Keep T fixed, and tweak delta_shift in order to generate less/more examples
 T = 150
-delta_shift = T - 50
-num_forecast_examples = 24
 motion_prefix = 50
 motion_suffix = 100
 train_for = 'final'
@@ -222,6 +211,10 @@ ds_label = 'this is invalid; you should define it properly from runPP.py'
 ds_path = None
 ds_is_3d = None
 dataset = None
+# drop_features and dimensions_to_ignore only need to be here so that DRA.py
+# (in NeuralModels) can find them
+drop_features = False
+dimensions_to_ignore = np.asarray([])
 
 ##################################################
 # Setup code for datasets exposed by this module #
@@ -229,16 +222,15 @@ dataset = None
 
 
 def runall():
-    global trainData, completeData, validateData, completeValidationData, \
-        data_stats, data3Dtensor, Y3Dtensor, validate3Dtensor, \
+    global data_stats, data3Dtensor, Y3Dtensor, validate3Dtensor, \
         validateY3Dtensor, trX_forecast, trY_forecast, malikTrainFeatures, \
         malikPredictFeatures, validate_malikTrainFeatures, \
         validate_malikPredictFeatures, trX_forecast_malik, \
         trY_forecast_malik, data_mean, data_std, \
         new_idx, nodeFeatures, predictFeatures, validate_nodeFeatures, \
         validate_predictFeatures, forecast_nodeFeatures, \
-        forecast_predictFeatures, trainSubjects, \
-        validateSubject, actions, nodeFeatures_t_1, \
+        forecast_predictFeatures, trainSubjects, new_idx, \
+        validateSubject, actions, nodeFeatures_t_1, nodeFeaturesRanges, \
         validate_nodeFeatures_t_1, forecast_nodeFeatures_t_1, dataset
 
     if ds_is_3d:
@@ -246,12 +238,18 @@ def runall():
     else:
         # I don't know why, but this still requires a seq_length for some
         # reason
-        # XXX: does P2DDataset also need args for head removal, etc.? I meant
-        # to get rid of that, but I don't know whether I succeeded.
-        dataset = P2DDataset(ds_path, seq_length=32)
+        # XXX: need to get rid of IkeaDB-specialised head removal crap. If head
+        # sucks then it should be stripped from .h5 in the first place.
+        dataset = P2DDataset(ds_path, seq_length=32, remove_head=True)
 
     # Compute training data mean
-    data_mean, data_std, new_idx = normalizationStats(completeData)
+    all_data_tensor, _ = dataset.get_ds_for_train(train=True,
+                                                  seq_length=64,
+                                                  discard_shorter=64,
+                                                  gap=64)
+    # we flatten this into (N*T)*D tensor, rather than N*T*D
+    all_data_tensor = all_data_tensor.reshape((-1, all_data_tensor.shape[2]))
+    data_mean, data_std = normalizationStats(all_data_tensor)
     data_stats = {}
     data_stats['mean'] = data_mean
     data_stats['std'] = data_std
@@ -260,14 +258,14 @@ def runall():
     def divvy_up_like_sTS(tensor):
         """Splits an an N*(T+2)*D tensor into three T*N*D tensors mimicking the
         ones produced by sampleTrainSequences."""
-        tensor = tensor.tranpose((1, 0, 2))
-        assert tensor.shape[0] == T, tensor.shape
+        tensor = tensor.transpose((1, 0, 2))
+        assert tensor.shape[0] == T + 2, tensor.shape
         return tensor[1:-1], tensor[2:], tensor[0:-2]
 
     # 2 normalized 3D tensor for training and validation
     d4t_kwargs = {
         'seq_length': T + 2,
-        'gap': 3,
+        'gap': 12,
         # make sure it doesn't return any truncated sequences
         'discard_shorter': T + 2
     }
@@ -291,7 +289,7 @@ def runall():
         """Divides a big N*(prefix+suffix+1)*D tensor into tensors of size
         prefix*N*D, prefix*N*D, and suffix*N*D in the same manner as
         generateForecastingExamples."""
-        tensor = tensor.tranpose((1, 0, 2))
+        tensor = tensor.transpose((1, 0, 2))
         assert tensor.shape[0] == fcst_len, tensor.shape
         return tensor[1:1+motion_prefix], tensor[:motion_prefix], \
             tensor[motion_prefix+1:]
@@ -305,6 +303,16 @@ def runall():
         = divvy_up_like_gFE(data_val_fcst)
 
     nodeFeaturesRanges = get_feat_ranges(ds_label)
+    # validation check to make sure everything is accounted for
+    data_cols = set(range(trX_forecast.shape[-1]))
+    used_cols = {c for clist in nodeFeaturesRanges.values() for c in clist}
+    unused_cols = data_cols - used_cols
+    if unused_cols:
+        col_str = ','.join(map(str, unused_cols))
+        n_unused = len(unused_cols)
+        print('WARNING: %d columns are unused: %s' % (n_unused, col_str))
+    assert not unused_cols, "Can't continue with unused feature columns"
+    new_idx = np.asarray(sorted(used_cols))
 
     # Create training and validation features for DRA
     nodeFeatures = cherryPickNodeFeatures(data3Dtensor, nodeFeaturesRanges)
