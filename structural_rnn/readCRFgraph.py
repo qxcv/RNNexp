@@ -147,6 +147,44 @@ def readCRFgraph(poseDataset, noise=1e-10, forecast_on_noisy_features=False):
         trX_nodeFeatures
 
 
+def convert_forecast_data(poseDataset, tensor_ntd):
+    """Converts an N*T*D data tensor (tensor_ntd) into the dictionary-based
+    format required by ERD."""
+    # vvv| these are assumed to have been pre-calculated by readCRFgraph() |vvv
+    global nodeNames, nodeToEdgeConnections, nodeConnections, edgeList
+    # ^^^|    (although I could just as easily pass them in manually)      |^^^
+
+    trX_forecast = {}
+    trX_nodeFeatures = {}
+    # time-first
+    tensor_tnd = np.transpose(tensor_ntd, (1, 0, 2))
+    nfr = poseDataset.nodeFeaturesRanges
+    nodeFeatures = poseDataset.cherryPickNodeFeatures(tensor_tnd, nfr)
+    for nodeName in nodeNames.keys():
+        edge_features = {}
+        nodeType = nodeNames[nodeName]
+        edgeTypesConnectedTo = nodeToEdgeConnections[nodeType].keys()
+
+        for edgeType in edgeTypesConnectedTo:
+            edge_features[edgeType] = poseDataset.getDRAFeatures(
+                nodeName, edgeType, nodeConnections, nodeNames, nodeFeatures)
+
+        edgeType = nodeType + '_input'
+        nodeRNNFeatures = copy.deepcopy(edge_features[edgeType])
+
+        for edgeType in edgeList:
+            if edgeType not in edgeTypesConnectedTo:
+                continue
+            nodeRNNFeatures = np.concatenate(
+                (nodeRNNFeatures, edge_features[edgeType]), axis=2)
+
+        idx = nodeName + ':' + nodeType
+        trX_forecast[idx] = nodeRNNFeatures
+        trX_nodeFeatures[idx] = nodeFeatures[nodeName]
+
+    return trX_forecast, trX_nodeFeatures
+
+
 def getNodeFeature(nodeName, nodeFeatures, nodeFeatures_t_1, poseDataset):
     edge_features = {}
     nodeType = nodeNames[nodeName]
