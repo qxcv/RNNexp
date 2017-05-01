@@ -88,10 +88,8 @@ def readCRFgraph(poseDataset, noise=1e-10, forecast_on_noisy_features=False):
         high = 0
 
         for edgeType in edgeTypesConnectedTo:
-            [
-                edge_features[edgeType], validate_edge_features[edgeType],
-                forecast_edge_features[edgeType]
-            ] = poseDataset.getfeatures(
+            edge_features[edgeType], validate_edge_features[edgeType], \
+                forecast_edge_features[edgeType] = poseDataset.getfeatures(
                 nodeName,
                 edgeType,
                 nodeConnections,
@@ -129,8 +127,8 @@ def readCRFgraph(poseDataset, noise=1e-10, forecast_on_noisy_features=False):
                 (forecast_nodeRNNFeatures, forecast_edge_features[edgeType]),
                 axis=2)
 
-        [Y, Y_validate, Y_forecast, X_forecast, num_classes
-         ] = poseDataset.getlabels(nodeName)
+        [Y, Y_validate, Y_forecast, X_forecast,
+         num_classes] = poseDataset.getlabels(nodeName)
         nodeList[nodeType] = num_classes
 
         idx = nodeName + ':' + nodeType
@@ -147,25 +145,3 @@ def readCRFgraph(poseDataset, noise=1e-10, forecast_on_noisy_features=False):
         edgeList, edgeListComplete, edgeFeatures, nodeToEdgeConnections, \
         trX, trY, trX_validate, trY_validate, trX_forecast, trY_forecast, \
         trX_nodeFeatures
-
-
-def getNodeFeature(nodeName, nodeFeatures, nodeFeatures_t_1, poseDataset):
-    edge_features = {}
-    nodeType = nodeNames[nodeName]
-    edgeTypesConnectedTo = nodeToEdgeConnections[nodeType].keys()
-
-    for edgeType in edgeTypesConnectedTo:
-        edge_features[edgeType] = poseDataset.getDRAfeatures(
-            nodeName, edgeType, nodeConnections, nodeNames, nodeFeatures,
-            nodeFeatures_t_1)
-
-    edgeType = nodeType + '_input'
-    nodeRNNFeatures = copy.deepcopy(edge_features[edgeType])
-
-    for edgeType in edgeList:
-        if edgeType not in edgeTypesConnectedTo:
-            continue
-        nodeRNNFeatures = np.concatenate(
-            (nodeRNNFeatures, edge_features[edgeType]), axis=2)
-
-    return nodeRNNFeatures

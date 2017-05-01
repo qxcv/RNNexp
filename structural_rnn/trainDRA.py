@@ -52,7 +52,6 @@ parser.add_argument('--sequence_length', type=int, default=150)
 parser.add_argument('--sequence_overlap', type=int, default=50)
 parser.add_argument('--maxiter', type=int, default=15000)
 parser.add_argument('--crf', type=str, default='')
-parser.add_argument('--copy_state', type=int, default=0)
 parser.add_argument('--full_skeleton', type=int, default=0)
 parser.add_argument('--weight_decay', type=float, default=0.0)
 parser.add_argument('--train_for', type=str, default='validate')
@@ -90,7 +89,6 @@ import processdata as poseDataset
 poseDataset.T = args.sequence_length
 poseDataset.delta_shift = args.sequence_length - args.sequence_overlap
 poseDataset.num_forecast_examples = 24
-poseDataset.copy_state = args.copy_state
 poseDataset.full_skeleton = args.full_skeleton
 poseDataset.train_for = args.train_for
 poseDataset.temporal_features = args.temporal_features
@@ -100,8 +98,6 @@ poseDataset.drop_features = args.drop_features
 poseDataset.drop_id = drop_id
 poseDataset.subsample_data = args.subsample_data
 poseDataset.runall()
-if poseDataset.copy_state:
-    args.batch_size = poseDataset.minibatch_size
 
 print '**** H3.6m Loaded ****'
 
@@ -567,7 +563,6 @@ def trainDRA():
     print path_to_checkpoint
     if not os.path.exists(path_to_checkpoint):
         os.mkdir(path_to_checkpoint)
-    saveNormalizationStats(path_to_checkpoint)
     nodeNames, nodeList, nodeFeatureLength, nodeConnections, edgeList, \
         edgeListComplete, edgeFeatures, nodeToEdgeConnections, trX, trY, \
         trX_validation, trY_validation, trX_forecasting, trY_forecasting, \
@@ -639,7 +634,6 @@ def trainMaliks():
 
     if not os.path.exists(path_to_checkpoint):
         os.mkdir(path_to_checkpoint)
-    saveNormalizationStats(path_to_checkpoint)
 
     trX, trY = poseDataset.getMalikFeatures()
     trX_validation, trY_validation = poseDataset.getMalikValidationFeatures()
@@ -692,7 +686,6 @@ def trainLSTM():
 
     if not os.path.exists(path_to_checkpoint):
         os.mkdir(path_to_checkpoint)
-    saveNormalizationStats(path_to_checkpoint)
 
     trX, trY = poseDataset.getMalikFeatures()
     trX_validation, trY_validation = poseDataset.getMalikValidationFeatures()
@@ -737,28 +730,6 @@ def trainLSTM():
         maxiter=args.maxiter,
         poseDataset=poseDataset,
         unNormalizeData=unNormalizeData)
-
-
-def saveNormalizationStats(path):
-    activities = {}
-    activities['walking'] = 14
-    activities['eating'] = 4
-    activities['smoking'] = 11
-    activities['discussion'] = 3
-    activities['walkingdog'] = 15
-
-    cPickle.dump(poseDataset.data_stats,
-                 open('{0}h36mstats.pik'.format(path), 'wb'))
-    forecastidx = poseDataset.data_stats['forecastidx']
-    num_forecast_examples = len(forecastidx.keys())
-    f = open('{0}forecastidx'.format(path), 'w')
-    for i in range(num_forecast_examples):
-        tupl = forecastidx[i]
-        st = '{0},{1},{2},{3}\n'.format(i, activities[tupl[0]], tupl[2],
-                                        tupl[1])
-        f.write(st)
-    f.close()
-    print "************Done saving the stats*********"
 
 
 if __name__ == '__main__':

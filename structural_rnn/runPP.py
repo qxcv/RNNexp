@@ -1,14 +1,16 @@
 #!/usr/bin/env python2
 """Does something similar to hyperParameterTuning.py and trainDRA.py, but
-specialised to my pose prediction data format."""
+specialised to my pose prediction data format.
+
+Note that this does *NOT* rely on hyperParameterTuning.py or trainDRA.py. You
+should not need to make changes to this file for this one to work!"""
 import argparse
-import cPickle
 import os
 import sys
 
-from neuralmodels.costs import softmax_loss, euclidean_loss
-from neuralmodels.layers import LSTM, multilayerLSTM, simpleRNN, FCLayer, \
-    AddNoiseToInput, softmax, TemporalInputFeatures
+from neuralmodels.costs import euclidean_loss
+from neuralmodels.layers import LSTM, multilayerLSTM, FCLayer, \
+    TemporalInputFeatures
 from neuralmodels.loadcheckpoint import load, loadDRA
 from neuralmodels.models import DRA, noisyRNN
 from neuralmodels.updates import Momentum
@@ -17,7 +19,7 @@ import theano
 from theano import tensor as T
 
 from unNormalizeData import unNormalizeData
-import crfproblems.h36m.processdata as poseDataset
+import crfproblems.stdpp.processdata as poseDataset
 import readCRFgraph as graph
 
 rng = np.random.RandomState(1234567890)
@@ -72,15 +74,8 @@ def get_default_args():
         params['iter_to_load'] = 2500
         params['model_to_train'] = 'dra'
         params['crf'] = ''
-        params['copy_state'] = 0
-        params['full_skeleton'] = 1
         params['weight_decay'] = 0.0
-        params['temporal_features'] = 0
         params['dra_type'] = 'simple'
-        params['dataset_prefix'] = ''
-        params['drop_features'] = 0
-        params['drop_id'] = '9'
-        params['subsample_data'] = 1
 
     elif train_model == 'lstm3lr' or train_model == 'erd':
         # These hyperparameters are OKAY to tweak. They will affect training,
@@ -114,13 +109,7 @@ def get_default_args():
             params['model_to_train'] = 'malik'
         params['snapshot_rate'] = 250
         params['crf'] = ''
-        params['copy_state'] = 0
-        params['full_skeleton'] = 1
         params['weight_decay'] = 0.0
-        params['temporal_features'] = 0
-        params['dataset_prefix'] = ''
-        params['drop_features'] = 0
-        params['drop_id'] = '9'
 
     # Setting directory to dump trained models and then executing trainDRA.py
     params['checkpoint_path'] \
@@ -173,16 +162,17 @@ parser.add_argument('--sequence_length', type=int, default=150)
 parser.add_argument('--sequence_overlap', type=int, default=50)
 parser.add_argument('--maxiter', type=int, default=15000)
 parser.add_argument('--crf', type=str, default='')
-parser.add_argument('--copy_state', type=int, default=0)
-parser.add_argument('--full_skeleton', type=int, default=0)
 parser.add_argument('--weight_decay', type=float, default=0.0)
 parser.add_argument('--train_for', type=str, default='validate')
 parser.add_argument('--dra_type', type=str, default='simple')
-parser.add_argument('--temporal_features', type=int, default=0)
-parser.add_argument('--dataset_prefix', type=str, default='')
-parser.add_argument('--drop_features', type=int, default=0)
-parser.add_argument('--subsample_data', type=int, default=1)
-parser.add_argument('--drop_id', type=str, default='')
+parser.add_argument(
+    '--3d',
+    action='store_true',
+    dest='is_3d',
+    default=False,
+    help='read 3D features from this dataset (otherwise read 2D ones)')
+parser.add_argument('dataset_path', help='path to .h5 containing poses')
+parser.add_argument('output_dir', help='where to store snapshots and poses')
 args = parser.parse_args(get_default_args() + sys.argv[1:])
 
 print args
@@ -190,28 +180,15 @@ if args.use_pretrained:
     print 'Loading pre-trained model with iter={0}'.format(args.iter_to_load)
 gradient_method = Momentum(momentum=args.momentum)
 
-drop_ids = args.drop_id.split(',')
-drop_id = []
-for dids in drop_ids:
-    drop_id.append(int(dids))
-'''Loads H3.6m dataset'''
+# Loads H3.6m dataset
 poseDataset.T = args.sequence_length
 poseDataset.delta_shift = args.sequence_length - args.sequence_overlap
 poseDataset.num_forecast_examples = 24
-poseDataset.copy_state = args.copy_state
-poseDataset.full_skeleton = args.full_skeleton
 poseDataset.train_for = args.train_for
-poseDataset.temporal_features = args.temporal_features
-poseDataset.crf_file = './crfproblems/h36m/crf' + args.crf
-poseDataset.dataset_prefix = args.dataset_prefix
-poseDataset.drop_features = args.drop_features
-poseDataset.drop_id = drop_id
-poseDataset.subsample_data = args.subsample_data
+poseDataset.crf_file = './crfproblems/stdpp/crf' + args.crf
+poseDataset.ds_path = args.dataset_path
+poseDataset.ds_is_3d = args.is_3d
 poseDataset.runall()
-if poseDataset.copy_state:
-    args.batch_size = poseDataset.minibatch_size
-
-print '**** H3.6m Loaded ****'
 
 
 def saveForecastedMotion(forecast, path, prefix='ground_truth_forecast_N_'):
@@ -228,102 +205,6 @@ def saveForecastedMotion(forecast, path, prefix='ground_truth_forecast_N_'):
             st = st[:-1]
             f.write(st + '\n')
         f.close()
-
-
-def DRAmodelClassification(nodeList,
-                           edgeList,
-                           edgeListComplete,
-                           edgeFeatures,
-                           nodeFeatureLength,
-                           nodeToEdgeConnections,
-                           clipnorm=0.0):
-    '''
-    Understanding data structures
-    nodeToEdgeConnections: node_type ---> [edge_types]
-    nodeConnections: node_name ---> [node_names]
-    nodeNames: node_name ---> node_type
-    nodeList: node_type ---> output_dimension
-    nodeFeatureLength: node_type ---> feature_dim_into_nodeRNN
-
-    edgeList: list of edge types
-    edgeFeatures: edge_type ---> feature_dim_into_edgeRNN
-    '''
-
-    edgeRNNs = {}
-    edgeNames = edgeList
-    lstm_init = 'orthogonal'
-    softmax_init = 'uniform'
-
-    for em in edgeNames:
-        inputJointFeatures = edgeFeatures[em]
-        edgeRNNs[em] = [
-            TemporalInputFeatures(inputJointFeatures),
-            AddNoiseToInput(rng=rng), simpleRNN(
-                'rectify',
-                'uniform',
-                size=500,
-                temporal_connection=False,
-                rng=rng), simpleRNN(
-                    'rectify',
-                    'uniform',
-                    size=500,
-                    temporal_connection=False,
-                    rng=rng),
-            LSTM('tanh', 'sigmoid', lstm_init, 100, 1000, rng=rng),
-            LSTM('tanh', 'sigmoid', lstm_init, 100, 1000, rng=rng)
-        ]
-
-    nodeRNNs = {}
-    nodeNames = nodeList.keys()
-    nodeLabels = {}
-    for nm in nodeNames:
-        num_classes = nodeList[nm]
-        nodeRNNs[nm] = [
-            LSTM('tanh', 'sigmoid', lstm_init, 100, 1000, rng=rng), simpleRNN(
-                'rectify',
-                'uniform',
-                size=500,
-                temporal_connection=False,
-                rng=rng), simpleRNN(
-                    'rectify',
-                    'uniform',
-                    size=100,
-                    temporal_connection=False,
-                    rng=rng), simpleRNN(
-                        'rectify',
-                        'uniform',
-                        size=54,
-                        temporal_connection=False,
-                        rng=rng), softmax(num_classes, softmax_init, rng=rng)
-        ]
-        em = nm + '_input'
-        edgeRNNs[em] = [
-            TemporalInputFeatures(nodeFeatureLength[nm]),
-            AddNoiseToInput(rng=rng),
-            simpleRNN(
-                'rectify',
-                'uniform',
-                size=500,
-                temporal_connection=False,
-                rng=rng),
-            simpleRNN(
-                'rectify',
-                'uniform',
-                size=500,
-                temporal_connection=False,
-                rng=rng),
-        ]
-        nodeLabels[nm] = T.lmatrix()
-    learning_rate = T.fscalar()
-    dra = DRA(edgeRNNs,
-              nodeRNNs,
-              nodeToEdgeConnections,
-              edgeListComplete,
-              softmax_loss,
-              nodeLabels,
-              learning_rate,
-              clipnorm=clipnorm)
-    return dra
 
 
 def DRAmodelRegression(nodeList, edgeList, edgeListComplete, edgeFeatures,
@@ -675,7 +556,6 @@ def trainDRA():
     print path_to_checkpoint
     if not os.path.exists(path_to_checkpoint):
         os.mkdir(path_to_checkpoint)
-    saveNormalizationStats(path_to_checkpoint)
     nodeNames, nodeList, nodeFeatureLength, nodeConnections, edgeList, \
         edgeListComplete, edgeFeatures, nodeToEdgeConnections, trX, trY, \
         trX_validation, trY_validation, trX_forecasting, trY_forecasting, \
@@ -747,7 +627,6 @@ def trainMaliks():
 
     if not os.path.exists(path_to_checkpoint):
         os.mkdir(path_to_checkpoint)
-    saveNormalizationStats(path_to_checkpoint)
 
     trX, trY = poseDataset.getMalikFeatures()
     trX_validation, trY_validation = poseDataset.getMalikValidationFeatures()
@@ -800,7 +679,6 @@ def trainLSTM():
 
     if not os.path.exists(path_to_checkpoint):
         os.mkdir(path_to_checkpoint)
-    saveNormalizationStats(path_to_checkpoint)
 
     trX, trY = poseDataset.getMalikFeatures()
     trX_validation, trY_validation = poseDataset.getMalikValidationFeatures()
@@ -845,28 +723,6 @@ def trainLSTM():
         maxiter=args.maxiter,
         poseDataset=poseDataset,
         unNormalizeData=unNormalizeData)
-
-
-def saveNormalizationStats(path):
-    activities = {}
-    activities['walking'] = 14
-    activities['eating'] = 4
-    activities['smoking'] = 11
-    activities['discussion'] = 3
-    activities['walkingdog'] = 15
-
-    cPickle.dump(poseDataset.data_stats,
-                 open('{0}h36mstats.pik'.format(path), 'wb'))
-    forecastidx = poseDataset.data_stats['forecastidx']
-    num_forecast_examples = len(forecastidx.keys())
-    f = open('{0}forecastidx'.format(path), 'w')
-    for i in range(num_forecast_examples):
-        tupl = forecastidx[i]
-        st = '{0},{1},{2},{3}\n'.format(i, activities[tupl[0]], tupl[2],
-                                        tupl[1])
-        f.write(st)
-    f.close()
-    print "************Done saving the stats*********"
 
 
 if __name__ == '__main__':

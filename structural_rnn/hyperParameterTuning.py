@@ -53,7 +53,6 @@ if train_model == 'srnn':
     params['iter_to_load'] = 2500
     params['model_to_train'] = 'dra'
     params['crf'] = ''
-    params['copy_state'] = 0
     params['full_skeleton'] = 1
     params['weight_decay'] = 0.0
     params['temporal_features'] = 0
@@ -97,7 +96,6 @@ elif train_model == 'lstm3lr' or train_model == 'erd':
         params['model_to_train'] = 'malik'
     params['snapshot_rate'] = 250
     params['crf'] = ''
-    params['copy_state'] = 0
     params['full_skeleton'] = 1
     params['weight_decay'] = 0.0
     params['temporal_features'] = 0

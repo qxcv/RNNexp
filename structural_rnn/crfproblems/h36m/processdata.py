@@ -402,7 +402,6 @@ def getMalikTrajectoryForecasting(noise=1e-5):
 T = 150
 delta_shift = T - 50
 num_forecast_examples = 24
-copy_state = 0
 full_skeleton = 1
 motion_prefix = 50
 motion_suffix = 100
@@ -472,17 +471,11 @@ def runall():
     print T
     # Create normalized 3D tensor for training and validation
 
-    if copy_state:
-        data3Dtensor, Y3Dtensor, minibatch_size \
-            = sampleConnectedTrainSequences(trainData, T, delta_shift)
-        validate3Dtensor, validateY3Dtensor, minibatch_size_ignore \
-            = sampleConnectedTrainSequences(validateData, T, delta_shift)
-    else:
-        data3Dtensor, Y3Dtensor, data3Dtensor_t_1, minibatch_size \
-            = sampleTrainSequences(trainData, T, delta_shift)
-        validate3Dtensor, validateY3Dtensor, validate3Dtensor_t_1, \
-            minibatch_size_ignore = sampleTrainSequences(validateData, T,
-                                                         delta_shift)
+    data3Dtensor, Y3Dtensor, data3Dtensor_t_1, minibatch_size \
+        = sampleTrainSequences(trainData, T, delta_shift)
+    validate3Dtensor, validateY3Dtensor, validate3Dtensor_t_1, \
+        minibatch_size_ignore = sampleTrainSequences(validateData, T,
+                                                     delta_shift)
 
     print 'Training data stats (T,N,D) is ', data3Dtensor.shape
     print 'Training data stats (T,N,D) is ', validate3Dtensor.shape
